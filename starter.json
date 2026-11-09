@@ -1,0 +1,21 @@
+{
+  "name": "Duo Doors",
+  "genre": "platformer",
+  "dim": "2D",
+  "mode": "Co-op",
+  "players": "2–4",
+  "hook": "Every door needs two players.",
+  "how": "Stand on plates to hold doors open for each other, boost a friend onto high ledges, pull levers, and get everyone to the exit. Five short levels.",
+  "controls": "Arrow keys or WASD and Space, or on-screen buttons. Tap to send your buddy somewhere",
+  "uses": [
+    ["Host-run rules", "The host's browser works out which plates are pressed and which doors are open; if it leaves, the next player takes over."],
+    ["Bots", "Alone? A buddy bot follows you, holds plates for you and goes where you tap."],
+    ["Leaderboard", "The fastest run through all five levels."],
+    ["Live sync", "Everyone moves, stacks and opens doors together."]
+  ],
+  "ideas": [
+    "Add a level where one player carries a key",
+    "Add spikes that only open when a plate is held",
+    "Turn the levels into a haunted house"
+  ]
+}
