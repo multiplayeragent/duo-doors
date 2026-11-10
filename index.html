@@ -568,6 +568,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const fmt = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}.${Math.floor((ms % 1000) / 100)}`;
 let toastTimer = 0, board = null, boardFor = -1;
 function toast(text, ms = 1600) { const m = $("msg"); m.textContent = text; m.classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => m.classList.remove("on"), ms); }
+let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function hud(g, L) {
   if (ATTRACT) { for (const id of ["lvl", "hint", "net"]) $(id).textContent = ""; return; }
   const t = Date.now();
@@ -575,7 +576,7 @@ function hud(g, L) {
   const alone = livePlayers().length === 1;
   $("hint").textContent = g.phase !== "play" ? "" : buddyHint(g, L) || L.hint + (alone && g.lv === 0 ? ` ${touchUI ? "Tap" : "Click"} anywhere to send your buddy there; tap yourself to call it back.` : "");
   const n = livePlayers().length;
-  $("net").textContent = net.offline ? "Offline: playing with bots" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the level" : ""}`;
+  $("net").textContent = net.offline ? "Offline: playing with bots" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the level" : ""}`;
   $("over").hidden = g.phase !== "done";
   if (g.phase === "done" && boardFor !== g.id) { boardFor = g.id; showDone(g); }
 }
@@ -606,6 +607,13 @@ function beep(freq, dur, type = "sine", vol = 0.1) {
   o.connect(gn).connect(actx.destination); o.start(); o.stop(actx.currentTime + dur);
 }
 const takenColors = () => new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...(parse(S.shared.bots, {}).list || []).map((b) => b.c)]);
+/** Two people joined at once with one color (or a bot has it): the one with the higher sessionId picks a free one. */
+function fixColor() {
+  const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId), bots = parse(S.shared.bots, {}).list || [];
+  if (!others.some(([id, p]) => p.c === myColor && id < net.sessionId) && !bots.some((b) => b.c === myColor)) return;
+  const taken = takenColors();
+  myColor = COLORS.find((c) => !taken.has(c)) || myColor; net.me.set("c", myColor);
+}
 
 // ── INPUT ───────────────────────────────────────────────────────────────────────────
 const touchUI = matchMedia("(pointer: coarse)").matches && !ATTRACT;
@@ -644,7 +652,7 @@ document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: fal
 let last = performance.now(), lastHb = 0, lastHud = 0, seenOpen = "", seenPhase = "";
 function frame(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // the first frame can be timed before load: never negative
-  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (isHost()) hostTick(dt, now); else host.wasHost = false;
   const g = game();
   if (g) {
@@ -679,7 +687,8 @@ function frame(now) {
   net.on("point", (msg, from) => { if (isHost()) applyPoint(from, msg); });
   net.on("again", () => { const g = game(); if (isHost() && g && g.phase === "done") newRun(g.id + 1); });
   net.on("fx", () => beep(880, 0.15, "triangle", 0.08));
-  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { dropped = false; });
   if (!net.offline && typeof MP !== "undefined") board = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
   const taken = takenColors();
   myColor = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
