@@ -20,13 +20,13 @@
   .card { width: min(360px, 90vw); max-height: 86vh; overflow: auto; padding: 22px; border-radius: 16px; background: #1e2550; border: 1px solid #ffffff22; text-align: center; box-sizing: border-box; }
   .card h2 { margin: 0 0 4px; font-size: 26px; color: #ffd23f; }
   .card h3 { margin: 14px 0 4px; font-size: 14px; color: #ffd23f; text-align: left; }
-  .card ol { text-align: left; margin: 0; padding-left: 24px; font-size: 14px; } .card li span { float: right; font-variant-numeric: tabular-nums; }
+  .card ol { text-align: left; margin: 0; padding-left: 24px; font-size: 14px; } .card li.note { list-style: none; margin-left: -24px; opacity: .85; } .card li span { float: right; font-variant-numeric: tabular-nums; }
   button.go { width: 100%; min-height: 48px; margin-top: 14px; border: 0; border-radius: 12px; background: #52d273; color: #07210f; font: 800 17px system-ui, sans-serif; cursor: pointer; }
-  .pad { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; gap: 12px; }
+  .pad { position: fixed; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 16px); display: flex; gap: 12px; }
   .pad button { width: 78px; height: 78px; border-radius: 50%; border: 2px solid #ffffff66; background: #ffffff1c; color: #fff; font: 800 18px system-ui, sans-serif; touch-action: none; }
   .pad button.on { background: #ffffff55; }
   #padL { left: max(16px, env(safe-area-inset-left)); } #padR { right: max(16px, env(safe-area-inset-right)); }
-  @media (max-width: 560px) { #hint { top: auto; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 96px); left: 14px; right: 14px; width: auto; text-align: center; } }
+  @media (max-width: 560px) { #hint { top: auto; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 112px); left: 14px; right: 14px; width: auto; text-align: center; } }
 </style>
 <script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
 </head>
@@ -41,7 +41,7 @@
 <div id="over" hidden><div class="card">
   <h2>You all got out!</h2>
   <div id="doneTime"></div>
-  <h3>Fastest runs</h3><ol id="board"><li>Loading…</li></ol>
+  <h3>Fastest runs</h3><ol id="board"><li class="note">Loading…</li></ol>
   <button class="go" id="again">Play again</button>
 </div></div>
 <script>
@@ -592,12 +592,12 @@ function buddyHint(g, L) {
 function showDone(g) {
   $("doneTime").textContent = `All ${LEVELS.length} levels in ${fmt(g.total)}`;
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  if (!board) { list.innerHTML = "<li class=\"note\">Leaderboards need a connection.</li>"; return; }
   const submit = me.fromStart && me.submitted !== g.id ? board.submit(Math.max(0, 3600000 - g.total)).catch(() => null) : Promise.resolve();
-  me.submitted = g.id; list.innerHTML = "<li>Loading…</li>";
+  me.submitted = g.id; list.innerHTML = "<li class=\"note\">Loading…</li>";
   submit.then(() => board.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : "<li>No runs yet. Set the first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(3600000 - e.score)}</span></li>`).join("") : "<li class=\"note\">No runs yet. Set the first.</li>";
+  }).catch(() => { list.innerHTML = "<li class=\"note\">Couldn't load the leaderboard.</li>"; });
 }
 $("again").onclick = () => { const g = game(); if (!g || g.phase !== "done") return; if (isHost()) newRun(g.id + 1); else net.send("again", {}); };
 let actx = null;
@@ -623,9 +623,10 @@ const wake = () => { if (!actx) { try { actx = new (window.AudioContext || windo
 const KEYS = { ArrowLeft: "left", a: "left", A: "left", ArrowRight: "right", d: "right", D: "right" };
 addEventListener("keydown", (e) => { wake(); const k = KEYS[e.key]; if (k) { e.preventDefault(); input[k] = true; } if ([" ", "ArrowUp", "w", "W"].includes(e.key)) { e.preventDefault(); if (!e.repeat) input.jump = true; } });
 addEventListener("keyup", (e) => { const k = KEYS[e.key]; if (k) input[k] = false; });
+addEventListener("blur", () => { input.left = input.right = false; }); // switching tabs mid-run: don't keep running
 for (const b of document.querySelectorAll(".pad button")) {
   const k = b.dataset.k;
-  b.addEventListener("pointerdown", (e) => { e.preventDefault(); wake(); b.setPointerCapture(e.pointerId); if (k === "jump") input.jump = true; else input[k] = true; b.classList.add("on"); });
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); wake(); if (k === "jump") input.jump = true; else input[k] = true; try { b.setPointerCapture(e.pointerId); } catch {} b.classList.add("on"); });
   for (const ev of ["pointerup", "pointercancel"]) b.addEventListener(ev, () => { if (k !== "jump") input[k] = false; b.classList.remove("on"); });
 }
 // Tap or click the level: send your buddy there. Tap near yourself: call it back to follow you.
@@ -647,6 +648,7 @@ function applyPoint(from, msg) {
   while (y < L.rows - 1 && !solid(L, Math.floor(x), y + 1, "")) y++; // drop the marker onto the floor below
   bot.point = [+x.toFixed(2), y + 1]; bot.task = { type: "follow" };
 }
+cv.addEventListener("contextmenu", (e) => e.preventDefault()); // right-click sends the buddy, never opens a menu
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 
 // ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
